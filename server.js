@@ -19,23 +19,33 @@ app.get('/', (req, res) => {
 });
 
 app.post('/api/yape', (req, res) => {
-  const { monto, remitente, codigo } = req.body;
-  
-  if (!monto || !remitente) {
-    return res.status(400).json({ error: "Datos incompletos" });
+  try {
+    const texto = req.body.mensaje || req.body.monto || '';
+    console.log("Notificación recibida:", texto);
+
+    const montoMatch = texto.match(/S\/\s*([\d\.,]+)/i);
+    const monto = montoMatch ? parseFloat(montoMatch[1].replace(',', '.')) : 0.00;
+
+    const nombreMatch = texto.match(/Yape!\s+(.*?)\s+te\s+envió/i);
+    const remitente = nombreMatch ? nombreMatch[1].trim() : 'Cliente Yape';
+
+    const datosYape = {
+      remitente,
+      monto: `S/ ${monto.toFixed(2)}`,
+      codigo: 'AUTO_' + Date.now().toString().slice(-4),
+      fecha: new Date().toLocaleTimeString('es-PE', { timeZone: 'America/Lima' })
+    };
+
+    console.log("Datos extraídos correctamente:", datosYape);
+
+    io.emit('nuevo_yape', datosYape);
+
+    return res.status(200).json({ success: true, data: datosYape });
+
+  } catch (error) {
+    console.error("Error al procesar el Yape:", error);
+    return res.status(500).json({ success: false, error: error.message });
   }
-
-  const pagoData = {
-    monto: monto,
-    remitente: remitente,
-    codigo: codigo || 'N/A',
-    fecha: new Date().toLocaleTimeString()
-  };
-
-  io.emit('alerta_pago', pagoData);
-  console.log('📢 Yape reenviado a cajeros:', pagoData);
-
-  return res.json({ status: "success", message: "Notificación enviada a cajeros" });
 });
 
 io.on('connection', (socket) => {
